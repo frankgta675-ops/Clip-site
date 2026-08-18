@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Clip Maker</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, system-ui, sans-serif;
+    background: #0f0f12;
+    color: #f5f5f5;
+    margin: 0;
+    padding: 20px;
+  }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  p.subtitle { color: #999; margin-top: 0; font-size: 14px; }
+  .card {
+    background: #1a1a1f;
+    border-radius: 14px;
+    padding: 18px;
+    margin-top: 18px;
+  }
+  label { display: block; margin-bottom: 8px; font-size: 14px; color: #ccc; }
+  input[type="file"], input[type="number"] {
+    width: 100%;
+    padding: 12px;
+    border-radius: 10px;
+    border: 1px solid #333;
+    background: #111;
+    color: #fff;
+    margin-bottom: 14px;
+    font-size: 15px;
+  }
+  button {
+    width: 100%;
+    padding: 14px;
+    border: none;
+    border-radius: 10px;
+    background: #7c5cff;
+    color: white;
+    font-size: 16px;
+    font-weight: 600;
+  }
+  button:disabled { background: #444; }
+  #status { margin-top: 14px; font-size: 14px; color: #aaa; }
+  .clip-list a {
+    display: block;
+    background: #111;
+    color: #7c5cff;
+    padding: 12px;
+    border-radius: 8px;
+    margin-top: 8px;
+    text-decoration: none;
+    font-size: 14px;
+  }
+</style>
+</head>
+<body>
+  <h1>Clip Maker</h1>
+  <p class="subtitle">Upload a long video, get short vertical clips back.</p>
+
+  <div class="card">
+    <form id="uploadForm">
+      <label for="video">Video file</label>
+      <input type="file" id="video" name="video" accept="video/*" required />
+
+      <label for="clipLength">Clip length (seconds)</label>
+      <input type="number" id="clipLength" name="clipLength" value="30" min="5" max="120" />
+
+      <button type="submit" id="submitBtn">Upload & Clip</button>
+    </form>
+    <div id="status"></div>
+    <div class="clip-list" id="clipList"></div>
+  </div>
+
+<script>
+const form = document.getElementById("uploadForm");
+const statusDiv = document.getElementById("status");
+const clipList = document.getElementById("clipList");
+const submitBtn = document.getElementById("submitBtn");
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  clipList.innerHTML = "";
+  submitBtn.disabled = true;
+  statusDiv.textContent = "Uploading...";
+
+  const formData = new FormData();
+  formData.append("video", document.getElementById("video").files[0]);
+  formData.append("clipLength", document.getElementById("clipLength").value);
+
+  try {
+    const res = await fetch("/upload", { method: "POST", body: formData });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Upload failed");
+
+    statusDiv.textContent = "Processing your video... this can take a few minutes.";
+    poll(data.jobId);
+  } catch (err) {
+    statusDiv.textContent = "Error: " + err.message;
+    submitBtn.disabled = false;
+  }
+});
+
+async function poll(jobId) {
+  const res = await fetch(`/status/${jobId}`);
+  const data = await res.json();
+
+  if (data.status === "processing") {
+    setTimeout(() => poll(jobId), 3000);
+  } else if (data.status === "error") {
+    statusDiv.textContent = "Something went wrong processing the video.";
+    submitBtn.disabled = false;
+  } else if (data.status === "done") {
+    statusDiv.textContent = `Done! ${data.clips.length} clip(s) ready.`;
+    submitBtn.disabled = false;
+    data.clips.forEach((clip, i) => {
+      const a = document.createElement("a");
+      a.href = clip;
+      a.textContent = `Download clip ${i + 1}`;
+      a.download = "";
+      clipList.appendChild(a);
+    });
+  }
+}
+</script>
+</body>
+</html>
